@@ -13,12 +13,88 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 
 const CONTENT_TYPES = ["post", "reply", "quote", "thread", "reel"] as const;
 const PAGE_SIZE = 20;
+
+/** Mirrors enums in `app/Content.ts` for admin selects */
+const PRIMARY_JOBS = [
+  "Explain",
+  "Prove",
+  "Convert",
+  "Invite",
+  "Relate",
+  "React",
+  "Predict",
+  "Show",
+  "Discover",
+] as const;
+
+const CONTENT_OBJECTS = [
+  "single_post",
+  "short_video",
+  "carousel",
+  "thread",
+  "quote_post",
+] as const;
+
+const INTERACTION_MODES = [
+  "passive_consumption",
+  "comment_debate",
+  "reply_generation",
+  "click_intent",
+  "save_reference",
+] as const;
+
+const RETRIEVAL_MODES = ["feed", "community"] as const;
+
+const AUTHORSHIP_MODES = ["founder", "creator_partner", "operator"] as const;
+
+const EVIDENCE_MODES = [
+  "reasoned",
+  "process_evidence",
+  "result_evidence",
+  "lived_experience",
+  "implicit",
+] as const;
+
+const TOPIC_DOMAINS = [
+  "developer_tools",
+  "design_tools",
+  "technology",
+  "future_of_work",
+  "product_development",
+  "brand_design",
+  "creator_identity",
+  "creator_growth",
+  "creator_culture",
+  "work_culture",
+  "career",
+  "business",
+  "travel",
+  "daily_life",
+  "lifestyle",
+  "data_engineering",
+  "generational_behavior",
+  "society",
+  "platform_behavior",
+] as const;
+
+function linesToArray(s: string): string[] {
+  return s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+}
+
+function joinLines(arr: string[] | undefined): string {
+  return (arr ?? []).join("\n");
+}
+
+function humanizeEnum(s: string): string {
+  return s.replace(/_/g, " ");
+}
 
 type ContentRow = {
   id: string;
@@ -49,6 +125,20 @@ type ContentRow = {
     sent?: number;
     extra?: Record<string, unknown>;
   };
+  primary_job?: string;
+  secondary_jobs?: string[];
+  content_object?: string;
+  primary_format_mechanic?: string;
+  secondary_format_mechanics?: string[];
+  interaction_mode?: string;
+  retrieval_mode?: string;
+  authorship_mode?: string;
+  evidence_mode?: string[];
+  topic_domain?: string;
+  attention_hook?: string[];
+  outcome_driver?: string[];
+  pattern_notes?: string;
+  media_url?: string;
 };
 
 type UserOption = { id: string; name: string; email: string };
@@ -86,6 +176,20 @@ export default function AdminContentPage() {
     performanceDriver: "",
     categoryReason: "",
     mediaUrls: "",
+    primary_job: "",
+    secondary_jobs: "",
+    content_object: "",
+    primary_format_mechanic: "",
+    secondary_format_mechanics: "",
+    interaction_mode: "",
+    retrieval_mode: "",
+    authorship_mode: "",
+    evidenceModes: [] as string[],
+    topic_domain: "",
+    attention_hook: "",
+    outcome_driver: "",
+    pattern_notes: "",
+    media_url: "",
     impressions: "0",
     likes: "0",
     replies: "0",
@@ -184,6 +288,44 @@ export default function AdminContentPage() {
     void loadContent();
   }, [loadContent]);
 
+  const pageMetricTotals = useMemo(() => {
+    return items.reduce(
+      (acc, c) => {
+        const m = c.metrics ?? {};
+        return {
+          impressions: acc.impressions + (m.impressions ?? 0),
+          likes: acc.likes + (m.likes ?? 0),
+          replies: acc.replies + (m.replies ?? 0),
+          reposts: acc.reposts + (m.reposts ?? 0),
+          saves: acc.saves + (m.saves ?? 0),
+          followerGain: acc.followerGain + (m.followerGain ?? 0),
+        };
+      },
+      {
+        impressions: 0,
+        likes: 0,
+        replies: 0,
+        reposts: 0,
+        saves: 0,
+        followerGain: 0,
+      },
+    );
+  }, [items]);
+
+  const strategyCountsOnPage = useMemo(() => {
+    const byJob = new Map<string, number>();
+    const byTopic = new Map<string, number>();
+    for (const c of items) {
+      if (c.primary_job) {
+        byJob.set(c.primary_job, (byJob.get(c.primary_job) ?? 0) + 1);
+      }
+      if (c.topic_domain) {
+        byTopic.set(c.topic_domain, (byTopic.get(c.topic_domain) ?? 0) + 1);
+      }
+    }
+    return { byJob, byTopic };
+  }, [items]);
+
   function openCreate() {
     const first = users[0]?.id ?? "";
     setCreating(true);
@@ -202,6 +344,20 @@ export default function AdminContentPage() {
       performanceDriver: "",
       categoryReason: "",
       mediaUrls: "",
+      primary_job: "",
+      secondary_jobs: "",
+      content_object: "",
+      primary_format_mechanic: "",
+      secondary_format_mechanics: "",
+      interaction_mode: "",
+      retrieval_mode: "",
+      authorship_mode: "",
+      evidenceModes: [],
+      topic_domain: "",
+      attention_hook: "",
+      outcome_driver: "",
+      pattern_notes: "",
+      media_url: "",
       impressions: "0",
       likes: "0",
       replies: "0",
@@ -232,6 +388,20 @@ export default function AdminContentPage() {
       performanceDriver: c.content?.performanceDriver ?? "",
       categoryReason: c.content?.categoryReason ?? "",
       mediaUrls: (c.media?.urls ?? []).join("\n"),
+      primary_job: c.primary_job ?? "",
+      secondary_jobs: joinLines(c.secondary_jobs),
+      content_object: c.content_object ?? "",
+      primary_format_mechanic: c.primary_format_mechanic ?? "",
+      secondary_format_mechanics: joinLines(c.secondary_format_mechanics),
+      interaction_mode: c.interaction_mode ?? "",
+      retrieval_mode: c.retrieval_mode ?? "",
+      authorship_mode: c.authorship_mode ?? "",
+      evidenceModes: [...(c.evidence_mode ?? [])],
+      topic_domain: c.topic_domain ?? "",
+      attention_hook: joinLines(c.attention_hook),
+      outcome_driver: joinLines(c.outcome_driver),
+      pattern_notes: c.pattern_notes ?? "",
+      media_url: c.media_url ?? "",
       impressions: String(c.metrics?.impressions ?? 0),
       likes: String(c.metrics?.likes ?? 0),
       replies: String(c.metrics?.replies ?? 0),
@@ -296,6 +466,11 @@ export default function AdminContentPage() {
         : {}),
     };
 
+    const primaryJobsSet = new Set<string>(PRIMARY_JOBS);
+    const secondaryJobsParsed = linesToArray(form.secondary_jobs).filter((j) =>
+      primaryJobsSet.has(j),
+    );
+
     const payload = {
       userId: form.userId,
       platform: form.platform,
@@ -315,6 +490,44 @@ export default function AdminContentPage() {
         sent: Number(form.sent) || 0,
         ...(extra !== undefined ? { extra } : {}),
       },
+      ...(trim(form.primary_job) ? { primary_job: trim(form.primary_job) } : {}),
+      ...(secondaryJobsParsed.length
+        ? { secondary_jobs: secondaryJobsParsed }
+        : {}),
+      ...(trim(form.content_object)
+        ? { content_object: trim(form.content_object) }
+        : {}),
+      ...(trim(form.primary_format_mechanic)
+        ? { primary_format_mechanic: trim(form.primary_format_mechanic) }
+        : {}),
+      ...(linesToArray(form.secondary_format_mechanics).length
+        ? {
+            secondary_format_mechanics: linesToArray(
+              form.secondary_format_mechanics,
+            ),
+          }
+        : {}),
+      ...(trim(form.interaction_mode)
+        ? { interaction_mode: trim(form.interaction_mode) }
+        : {}),
+      ...(trim(form.retrieval_mode)
+        ? { retrieval_mode: trim(form.retrieval_mode) }
+        : {}),
+      ...(trim(form.authorship_mode)
+        ? { authorship_mode: trim(form.authorship_mode) }
+        : {}),
+      ...(form.evidenceModes.length
+        ? { evidence_mode: form.evidenceModes }
+        : {}),
+      ...(trim(form.topic_domain) ? { topic_domain: trim(form.topic_domain) } : {}),
+      ...(linesToArray(form.attention_hook).length
+        ? { attention_hook: linesToArray(form.attention_hook) }
+        : {}),
+      ...(linesToArray(form.outcome_driver).length
+        ? { outcome_driver: linesToArray(form.outcome_driver) }
+        : {}),
+      ...(trim(form.pattern_notes) ? { pattern_notes: trim(form.pattern_notes) } : {}),
+      ...(trim(form.media_url) ? { media_url: trim(form.media_url) } : {}),
     };
     try {
       if (creating) {
@@ -512,13 +725,76 @@ export default function AdminContentPage() {
           </button>
         </div>
 
+        {!loading && items.length > 0 && (
+          <div className="space-y-3 border-b border-zinc-800 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
+              Analytics (this page)
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+                <p className="text-xs text-zinc-500">Metric totals</p>
+                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs tabular-nums text-zinc-300">
+                  <dt>Impressions</dt>
+                  <dd className="text-right">{pageMetricTotals.impressions}</dd>
+                  <dt>Likes</dt>
+                  <dd className="text-right">{pageMetricTotals.likes}</dd>
+                  <dt>Replies</dt>
+                  <dd className="text-right">{pageMetricTotals.replies}</dd>
+                  <dt>Reposts</dt>
+                  <dd className="text-right">{pageMetricTotals.reposts}</dd>
+                  <dt>Saves</dt>
+                  <dd className="text-right">{pageMetricTotals.saves}</dd>
+                  <dt>Follower Δ</dt>
+                  <dd className="text-right">{pageMetricTotals.followerGain}</dd>
+                </dl>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+                <p className="text-xs text-zinc-500">Primary job (count)</p>
+                <ul className="mt-2 max-h-28 space-y-1 overflow-y-auto text-xs text-zinc-300">
+                  {[...strategyCountsOnPage.byJob.entries()]
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([job, n]) => (
+                      <li key={job} className="flex justify-between gap-2">
+                        <span className="truncate">{job}</span>
+                        <span className="tabular-nums text-zinc-500">{n}</span>
+                      </li>
+                    ))}
+                  {strategyCountsOnPage.byJob.size === 0 && (
+                    <li className="text-zinc-600">No primary_job set</li>
+                  )}
+                </ul>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 sm:col-span-2 lg:col-span-1">
+                <p className="text-xs text-zinc-500">Topic domain (count)</p>
+                <ul className="mt-2 max-h-28 space-y-1 overflow-y-auto text-xs text-zinc-300">
+                  {[...strategyCountsOnPage.byTopic.entries()]
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([topic, n]) => (
+                      <li key={topic} className="flex justify-between gap-2">
+                        <span className="truncate" title={topic}>
+                          {humanizeEnum(topic)}
+                        </span>
+                        <span className="tabular-nums text-zinc-500">{n}</span>
+                      </li>
+                    ))}
+                  {strategyCountsOnPage.byTopic.size === 0 && (
+                    <li className="text-zinc-600">No topic_domain set</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
-        <table className="w-full min-w-180 text-left text-sm">
+        <table className="w-full min-w-[56rem] text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-800 text-zinc-500">
               <th className="px-4 py-3 font-medium">When</th>
               <th className="px-4 py-3 font-medium">User</th>
               <th className="px-4 py-3 font-medium">Platform</th>
+              <th className="px-4 py-3 font-medium">Job</th>
+              <th className="px-4 py-3 font-medium">Topic</th>
               <th className="px-4 py-3 font-medium">Preview</th>
               <th className="px-4 py-3 font-medium text-right">Impr.</th>
               <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -527,13 +803,13 @@ export default function AdminContentPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
                   Loading…
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
                   No content. Create a user first, then add content.
                 </td>
               </tr>
@@ -560,6 +836,15 @@ export default function AdminContentPage() {
                   </td>
                   <td className="px-4 py-3 text-zinc-400">
                     {c.platform ?? "—"}
+                  </td>
+                  <td className="max-w-[7rem] truncate px-4 py-3 text-zinc-400" title={c.primary_job}>
+                    {c.primary_job ?? "—"}
+                  </td>
+                  <td
+                    className="max-w-[9rem] truncate px-4 py-3 text-zinc-400"
+                    title={c.topic_domain}
+                  >
+                    {c.topic_domain ? humanizeEnum(c.topic_domain) : "—"}
                   </td>
                   <td className="max-w-xs truncate px-4 py-3 text-zinc-400">
                     {c.text.body}
@@ -628,7 +913,7 @@ export default function AdminContentPage() {
 
       {(creating || editing) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="flex h-160 max-h-[90vh] w-full max-w-lg flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
+          <div className="flex h-[min(90vh,52rem)] w-full max-w-2xl flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
             <h2 className="shrink-0 text-lg font-semibold text-zinc-50">
               {creating ? "New content" : "Edit content"}
             </h2>
@@ -704,7 +989,254 @@ export default function AdminContentPage() {
                   }
                 />
                 <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-                  Classification (content)
+                  Strategy
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-xs font-medium text-zinc-500">
+                    Primary job
+                    <select
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                      value={form.primary_job}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, primary_job: e.target.value }))
+                      }
+                    >
+                      <option value="">—</option>
+                      {PRIMARY_JOBS.map((j) => (
+                        <option key={j} value={j}>
+                          {j}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500">
+                    Content object
+                    <select
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                      value={form.content_object}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          content_object: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">—</option>
+                      {CONTENT_OBJECTS.map((o) => (
+                        <option key={o} value={o}>
+                          {humanizeEnum(o)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500 sm:col-span-2">
+                    Secondary jobs (one per line, same labels as primary)
+                    <textarea
+                      rows={2}
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100"
+                      value={form.secondary_jobs}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          secondary_jobs: e.target.value,
+                        }))
+                      }
+                      placeholder={"Relate\nProve"}
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500">
+                    Interaction mode
+                    <select
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                      value={form.interaction_mode}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          interaction_mode: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">—</option>
+                      {INTERACTION_MODES.map((m) => (
+                        <option key={m} value={m}>
+                          {humanizeEnum(m)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500">
+                    Retrieval mode
+                    <select
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                      value={form.retrieval_mode}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          retrieval_mode: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">—</option>
+                      {RETRIEVAL_MODES.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500">
+                    Authorship mode
+                    <select
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                      value={form.authorship_mode}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          authorship_mode: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">—</option>
+                      {AUTHORSHIP_MODES.map((m) => (
+                        <option key={m} value={m}>
+                          {humanizeEnum(m)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500">
+                    Topic domain
+                    <select
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                      value={form.topic_domain}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          topic_domain: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">—</option>
+                      {TOPIC_DOMAINS.map((d) => (
+                        <option key={d} value={d}>
+                          {humanizeEnum(d)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500 sm:col-span-2">
+                    Primary format mechanic
+                    <input
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                      value={form.primary_format_mechanic}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          primary_format_mechanic: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500 sm:col-span-2">
+                    Secondary format mechanics (one per line)
+                    <textarea
+                      rows={2}
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100"
+                      value={form.secondary_format_mechanics}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          secondary_format_mechanics: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs font-medium text-zinc-500">
+                      Evidence mode
+                    </p>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {EVIDENCE_MODES.map((m) => (
+                        <label
+                          key={m}
+                          className="flex cursor-pointer items-center gap-2 text-xs text-zinc-400"
+                        >
+                          <input
+                            type="checkbox"
+                            className="rounded border-zinc-600"
+                            checked={form.evidenceModes.includes(m)}
+                            onChange={(e) =>
+                              setForm((f) => ({
+                                ...f,
+                                evidenceModes: e.target.checked
+                                  ? f.evidenceModes.includes(m)
+                                    ? f.evidenceModes
+                                    : [...f.evidenceModes, m]
+                                  : f.evidenceModes.filter((x) => x !== m),
+                              }))
+                            }
+                          />
+                          {humanizeEnum(m)}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <label className="block text-xs font-medium text-zinc-500 sm:col-span-2">
+                    Attention hooks (one per line)
+                    <textarea
+                      rows={2}
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100"
+                      value={form.attention_hook}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          attention_hook: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500 sm:col-span-2">
+                    Outcome drivers (one per line)
+                    <textarea
+                      rows={2}
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100"
+                      value={form.outcome_driver}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          outcome_driver: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500 sm:col-span-2">
+                    Pattern notes
+                    <textarea
+                      rows={2}
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                      value={form.pattern_notes}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          pattern_notes: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-500 sm:col-span-2">
+                    Media URL (primary asset)
+                    <input
+                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                      value={form.media_url}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, media_url: e.target.value }))
+                      }
+                      placeholder="https://…"
+                    />
+                  </label>
+                </div>
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
+                  Legacy classification (optional)
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   {(
