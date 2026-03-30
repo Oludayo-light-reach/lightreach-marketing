@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
-import Content, { normalizeMetrics } from "@/app/Content";
+import Content, { contentLeanToApiPayload } from "@/app/Content";
 import User from "@/app/User";
+import { createContentDocument } from "@/lib/content-create";
 
 export const runtime = "nodejs";
 
@@ -28,7 +29,6 @@ export async function GET(req: Request) {
     const to = searchParams.get("to");
     const platform = searchParams.get("platform")?.trim() || "";
     const userId = searchParams.get("userId");
-    const type = searchParams.get("type")?.trim() || "";
     const q = searchParams.get("q")?.trim() ?? "";
 
     const pageRaw = searchParams.get("page");
@@ -46,19 +46,24 @@ export async function GET(req: Request) {
     const andConditions: Record<string, unknown>[] = [];
 
     if (from || to) {
-      const ts: Record<string, Date> = {};
-      if (from) ts.$gte = new Date(from);
-      if (to) ts.$lte = new Date(to);
-      andConditions.push({ timestamp: ts });
+      const exprParts: Record<string, unknown>[] = [];
+      if (from) {
+        exprParts.push({
+          $gte: [{ $ifNull: ["$date", "$timestamp"] }, new Date(from)],
+        });
+      }
+      if (to) {
+        exprParts.push({
+          $lte: [{ $ifNull: ["$date", "$timestamp"] }, new Date(to)],
+        });
+      }
+      andConditions.push({ $expr: { $and: exprParts } });
     }
     if (platform) {
       andConditions.push({ platform });
     }
     if (userId && mongoose.isValidObjectId(userId)) {
       andConditions.push({ user: new mongoose.Types.ObjectId(userId) });
-    }
-    if (type) {
-      andConditions.push({ type });
     }
 
     if (q) {
@@ -70,10 +75,12 @@ export async function GET(req: Request) {
         .lean();
       const userIds = matchingUsers.map((u) => u._id);
       const orClause: Record<string, unknown>[] = [
+        { text: rx },
         { "text.body": rx },
+        { url: rx },
+        { "text.url": rx },
         { platform: rx },
         { externalId: rx },
-        { type: rx },
       ];
       if (userIds.length) {
         orClause.push({ user: { $in: userIds } });
@@ -93,51 +100,26 @@ export async function GET(req: Request) {
 
     const items = await Content.find(filter)
       .populate("user", "name email")
-      .sort({ timestamp: -1 })
+      .sort({ date: -1, timestamp: -1 } as Record<string, 1 | -1>)
       .skip(skip)
       .limit(limit)
       .lean();
 
     return NextResponse.json({
       content: items.map((c) => {
+        const raw = c as unknown as Record<string, unknown>;
         const pu =
-          c.user && typeof c.user === "object"
-            ? (c.user as { name?: string; email?: string })
+          raw.user && typeof raw.user === "object"
+            ? (raw.user as { name?: string; email?: string })
             : null;
-        return {
-        id: String(c._id),
-        userId: userIdFromLean(c),
-        user:
-          pu && (pu.name != null || pu.email != null)
-            ? { name: pu.name ?? "", email: pu.email ?? "" }
-            : null,
-        platform: c.platform,
-        type: c.type,
-        externalId: c.externalId,
-        timestamp: c.timestamp,
-        content: c.content,
-        text: c.text,
-        media: c.media,
-        metrics: normalizeMetrics(c.metrics as unknown as Record<string, unknown>),
-        meta: c.meta,
-        primary_job: c.primary_job,
-        secondary_jobs: c.secondary_jobs,
-        content_object: c.content_object,
-        primary_format_mechanic: c.primary_format_mechanic,
-        secondary_format_mechanics: c.secondary_format_mechanics,
-        interaction_mode: c.interaction_mode,
-        retrieval_mode: c.retrieval_mode,
-        authorship_mode: c.authorship_mode,
-        evidence_mode: c.evidence_mode,
-        topic_domain: c.topic_domain,
-        attention_hook: c.attention_hook,
-        outcome_driver: c.outcome_driver,
-        pattern_notes: c.pattern_notes,
-        media_url: c.media_url,
-        createdAt: c.createdAt,
-        updatedAt: c.updatedAt,
-      };
-    }),
+        return contentLeanToApiPayload(raw, {
+          userId: userIdFromLean(c as { user: unknown }),
+          user:
+            pu && (pu.name != null || pu.email != null)
+              ? { name: pu.name ?? "", email: pu.email ?? "" }
+              : null,
+        });
+      }),
       total,
       page,
       limit,
@@ -155,138 +137,23 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await connectDB();
-    const body = await req.json();
-    const {
-      userId,
-      platform,
-      type,
-      externalId,
-      timestamp,
-      content,
-      text,
-      media,
-      metrics,
-      meta,
-      primary_job,
-      secondary_jobs,
-      content_object,
-      primary_format_mechanic,
-      secondary_format_mechanics,
-      interaction_mode,
-      retrieval_mode,
-      authorship_mode,
-      evidence_mode,
-      topic_domain,
-      attention_hook,
-      outcome_driver,
-      pattern_notes,
-      media_url,
-    } = body as Record<string, unknown>;
-
+    const body = (await req.json()) as Record<string, unknown>;
+    const userId = body.userId;
     if (!userId || !mongoose.isValidObjectId(String(userId))) {
       return NextResponse.json({ error: "valid userId is required" }, { status: 400 });
     }
-    const owner = await User.findById(String(userId));
-    if (!owner) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    const result = await createContentDocument(String(userId), body);
+    if (!result.ok) {
+      const status =
+        result.error === "User not found"
+          ? 404
+          : result.error === "Failed to load created content"
+            ? 500
+            : 400;
+      return NextResponse.json({ error: result.error }, { status });
     }
-
-    const textObj = text as { body?: string; url?: string; driveLink?: string } | undefined;
-    if (!textObj?.body?.trim() || !textObj?.url?.trim()) {
-      return NextResponse.json(
-        { error: "text.body and text.url are required" },
-        { status: 400 },
-      );
-    }
-
-    const ts = timestamp ? new Date(String(timestamp)) : new Date();
-    if (Number.isNaN(ts.getTime())) {
-      return NextResponse.json({ error: "Invalid timestamp" }, { status: 400 });
-    }
-
-    const doc = await Content.create({
-      user: new mongoose.Types.ObjectId(String(userId)),
-      platform: platform as string | undefined,
-      type: type as string | undefined,
-      externalId: externalId ? String(externalId) : undefined,
-      timestamp: ts,
-      content: content as object | undefined,
-      text: {
-        body: textObj.body.trim(),
-        url: textObj.url.trim(),
-        driveLink: textObj.driveLink?.trim(),
-      },
-      media: media as object | undefined,
-      metrics: normalizeMetrics(metrics as unknown as Record<string, unknown>),
-      meta: meta as object | undefined,
-      primary_job: typeof primary_job === "string" ? primary_job : undefined,
-      secondary_jobs: Array.isArray(secondary_jobs)
-        ? (secondary_jobs as string[])
-        : undefined,
-      content_object: typeof content_object === "string" ? content_object : undefined,
-      primary_format_mechanic:
-        typeof primary_format_mechanic === "string" ? primary_format_mechanic : undefined,
-      secondary_format_mechanics: Array.isArray(secondary_format_mechanics)
-        ? (secondary_format_mechanics as string[])
-        : undefined,
-      interaction_mode: typeof interaction_mode === "string" ? interaction_mode : undefined,
-      retrieval_mode: typeof retrieval_mode === "string" ? retrieval_mode : undefined,
-      authorship_mode: typeof authorship_mode === "string" ? authorship_mode : undefined,
-      evidence_mode: Array.isArray(evidence_mode) ? (evidence_mode as string[]) : undefined,
-      topic_domain: typeof topic_domain === "string" ? topic_domain : undefined,
-      attention_hook: Array.isArray(attention_hook) ? (attention_hook as string[]) : undefined,
-      outcome_driver: Array.isArray(outcome_driver) ? (outcome_driver as string[]) : undefined,
-      pattern_notes: typeof pattern_notes === "string" ? pattern_notes : undefined,
-      media_url: typeof media_url === "string" ? media_url : undefined,
-    });
-
-    const populated = await Content.findById(doc._id)
-      .populate("user", "name email")
-      .lean();
-
-    if (!populated) {
-      return NextResponse.json({ error: "Failed to load created content" }, { status: 500 });
-    }
-    const c = populated;
-    const pu =
-      c.user && typeof c.user === "object"
-        ? (c.user as { name?: string; email?: string })
-        : null;
-    return NextResponse.json({
-      content: {
-        id: String(c._id),
-        userId: userIdFromLean(c as { user: unknown }),
-        user:
-          pu && (pu.name != null || pu.email != null)
-            ? { name: pu.name ?? "", email: pu.email ?? "" }
-            : null,
-        platform: c.platform,
-        type: c.type,
-        externalId: c.externalId,
-        timestamp: c.timestamp,
-        content: c.content,
-        text: c.text,
-        media: c.media,
-        metrics: normalizeMetrics(c.metrics as unknown as Record<string, unknown>),
-        meta: c.meta,
-        primary_job: c.primary_job,
-        secondary_jobs: c.secondary_jobs,
-        content_object: c.content_object,
-        primary_format_mechanic: c.primary_format_mechanic,
-        secondary_format_mechanics: c.secondary_format_mechanics,
-        interaction_mode: c.interaction_mode,
-        retrieval_mode: c.retrieval_mode,
-        authorship_mode: c.authorship_mode,
-        evidence_mode: c.evidence_mode,
-        topic_domain: c.topic_domain,
-        attention_hook: c.attention_hook,
-        outcome_driver: c.outcome_driver,
-        pattern_notes: c.pattern_notes,
-        media_url: c.media_url,
-        createdAt: c.createdAt,
-        updatedAt: c.updatedAt,
-      },
-    });
+    return NextResponse.json({ content: result.content });
   } catch (e) {
     console.error(e);
     return NextResponse.json(

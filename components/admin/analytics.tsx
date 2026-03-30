@@ -26,7 +26,13 @@ import {
   YAxis,
 } from "recharts";
 
-const CONTENT_TYPES = ["post", "reply", "quote", "thread", "reel"] as const;
+const CONTENT_OBJECTS = [
+  "single_post",
+  "short_video",
+  "carousel",
+  "thread",
+  "quote_post",
+] as const;
 
 const chartTooltip = {
   contentStyle: {
@@ -111,8 +117,8 @@ type AnalyticsPayload = {
     engagementRate: number;
     avgImpressionsPerPost: number;
   }[];
-  byContentType: {
-    type: string;
+  byContentObject: {
+    contentObject: string;
     impressions: number;
     posts: number;
     engagement: number;
@@ -135,8 +141,8 @@ type AnalyticsPayload = {
     reposts: number;
     saves: number;
     platform?: string;
-    type?: string;
-    timestamp: string;
+    content_object?: string;
+    date: string;
     userName?: string;
   }[];
   comparison: {
@@ -161,7 +167,7 @@ function buildQuery(params: {
   to: string;
   platforms: string[];
   userId: string;
-  contentType: string;
+  contentObject: string;
   minImpressions: string;
   compare: boolean;
   topLimit: number;
@@ -170,7 +176,7 @@ function buildQuery(params: {
   if (params.platforms.length > 0)
     q.set("platform", params.platforms.join(","));
   if (params.userId) q.set("userId", params.userId);
-  if (params.contentType) q.set("type", params.contentType);
+  if (params.contentObject) q.set("contentObject", params.contentObject);
   if (params.minImpressions.trim())
     q.set("minImpressions", params.minImpressions.trim());
   if (params.compare) q.set("compare", "1");
@@ -362,7 +368,7 @@ export function AdminAnalytics({ title, description }: AnalyticsProps) {
   const [to, setTo] = useState(defaultTo);
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [userId, setUserId] = useState("");
-  const [contentType, setContentType] = useState("");
+  const [contentObject, setContentObject] = useState("");
   const [minImpressions, setMinImpressions] = useState("");
   const [compare, setCompare] = useState(false);
   const [topLimit, setTopLimit] = useState(20);
@@ -395,7 +401,7 @@ export function AdminAnalytics({ title, description }: AnalyticsProps) {
         to,
         platforms,
         userId,
-        contentType,
+        contentObject,
         minImpressions,
         compare,
         topLimit,
@@ -415,7 +421,7 @@ export function AdminAnalytics({ title, description }: AnalyticsProps) {
     to,
     platforms,
     userId,
-    contentType,
+    contentObject,
     minImpressions,
     compare,
     topLimit,
@@ -454,7 +460,7 @@ export function AdminAnalytics({ title, description }: AnalyticsProps) {
               setTo(defaultTo);
               setPlatforms([]);
               setUserId("");
-              setContentType("");
+              setContentObject("");
               setMinImpressions("");
               setCompare(false);
               setTopLimit(20);
@@ -491,15 +497,15 @@ export function AdminAnalytics({ title, description }: AnalyticsProps) {
             ))}
           </StyledSelect>
         </FilterField>
-        <FilterField label="Content type">
+        <FilterField label="Content object">
           <StyledSelect
-            value={contentType}
-            onChange={(e) => setContentType(e.target.value)}
+            value={contentObject}
+            onChange={(e) => setContentObject(e.target.value)}
           >
-            <option value="">All types</option>
-            {CONTENT_TYPES.map((t) => (
+            <option value="">All</option>
+            {CONTENT_OBJECTS.map((t) => (
               <option key={t} value={t}>
-                {t}
+                {t.replace(/_/g, " ")}
               </option>
             ))}
           </StyledSelect>
@@ -993,7 +999,7 @@ function AnalyticsMainColumn({
           >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={data.byContentType}
+                data={data.byContentObject}
                 layout="vertical"
                 margin={{ left: 4, right: 12, top: 4, bottom: 0 }}
               >
@@ -1564,26 +1570,26 @@ function AnalyticsMainColumn({
         />
 
         <div>
-          <SectionLabel icon={<IconBarChart />} label="Content type analysis" />
+          <SectionLabel icon={<IconBarChart />} label="Content object analysis" />
           <DataTable
             headers={[
-              "Type",
+              "Content object",
               "Posts",
               "Impressions",
               "Engagement",
               "Eng. rate",
             ]}
             alignRight={[false, true, true, true, true]}
-            empty={data.byContentType.length === 0}
+            empty={data.byContentObject.length === 0}
           >
-            {data.byContentType.map((row) => (
+            {data.byContentObject.map((row) => (
               <tr
-                key={row.type}
+                key={row.contentObject}
                 className="group border-b border-[rgba(255,255,255,0.04)] transition hover:bg-white/[0.02]"
               >
                 <td className="py-3 pr-4">
                   <span className="rounded-md border border-[rgba(255,255,255,0.06)] bg-[#18181b] px-2.5 py-1 text-xs font-medium text-[#d4d4d8]">
-                    {row.type}
+                    {row.contentObject.replace(/_/g, " ")}
                   </span>
                 </td>
                 <Td right>{row.posts.toLocaleString()}</Td>
@@ -1709,7 +1715,7 @@ function AnalyticsMainColumn({
               "Preview",
               "User",
               "Platform",
-              "Type",
+              "Object",
               "Imp.",
               "Likes",
               "Replies",
@@ -1752,9 +1758,9 @@ function AnalyticsMainColumn({
                   {p.platform ?? "—"}
                 </td>
                 <td className="py-3 pr-4">
-                  {p.type ? (
+                  {p.content_object ? (
                     <span className="rounded border border-[rgba(255,255,255,0.06)] bg-[#18181b] px-1.5 py-0.5 text-[10px] text-[#a1a1aa]">
-                      {p.type}
+                      {p.content_object.replace(/_/g, " ")}
                     </span>
                   ) : (
                     "—"

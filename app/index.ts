@@ -1,17 +1,14 @@
-export { default as User }    from "./User";
+export { default as User } from "./User";
 export { default as Content, parseMetric } from "./Content";
 
 export type { IUser, IPlatformFollowers, Platform } from "./User";
 export type {
   IContent,
-  IContentCategory,
-  IContentText,
-  IContentMedia,
-  IContentMetrics,
-  IContentMeta,
-  ContentType,
   ContentItem,
+  ContentMetrics,
   Metrics,
+  ContentFields,
+  ContentApiPayload,
   PrimaryJob,
   ContentObject,
   InteractionMode,
@@ -23,4 +20,4 @@ export type {
   OutcomeDriver,
   FormatMechanic,
 } from "./Content";
-export { normalizeMetrics } from "./Content";
+export { normalizeMetrics, contentLeanToApiPayload } from "./Content";

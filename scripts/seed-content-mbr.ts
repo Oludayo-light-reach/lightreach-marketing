@@ -138,16 +138,14 @@ function rowToPayload(
     likes: row.likes ?? undefined,
     replies: row.replies ?? undefined,
     reposts: row.reposts ?? undefined,
+    saves: row.saves ?? undefined,
   });
-
-  const contentType = row.content_object === "thread" ? "thread" : "post";
 
   return {
     user: userId,
     platform: row.platform,
-    type: contentType,
     externalId: String(row.id),
-    timestamp: new Date(`${row.date}T12:00:00.000Z`),
+    date: new Date(`${row.date}T12:00:00.000Z`),
     primary_job: row.primary_job as IContent["primary_job"],
     secondary_jobs: (row.secondary_jobs ?? []) as IContent["secondary_jobs"],
     content_object: row.content_object as IContent["content_object"],
@@ -161,11 +159,15 @@ function rowToPayload(
     attention_hook: row.attention_hook,
     outcome_driver: row.outcome_driver,
     pattern_notes: row.pattern_notes,
-    text: {
-      body: row.text,
-      url: row.post_link,
-    },
-    metrics,
+    text: row.text,
+    url: row.post_link,
+    impressions: metrics.impressions,
+    likes: metrics.likes,
+    replies: metrics.replies,
+    reposts: metrics.reposts,
+    saves: metrics.saves,
+    followerGain: metrics.followerGain,
+    sent: 0,
   };
 }
 

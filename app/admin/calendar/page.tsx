@@ -19,8 +19,8 @@ type ContentItem = {
   userId: string;
   user: { name: string; email: string } | null;
   platform?: string;
-  timestamp: string;
-  text: { body: string };
+  date: string;
+  text: string;
 };
 
 export default function AdminCalendarPage() {
@@ -67,7 +67,7 @@ export default function AdminCalendarPage() {
   const byDay = useMemo(() => {
     const map = new Map<string, ContentItem[]>();
     for (const c of filtered) {
-      const key = format(new Date(c.timestamp), "yyyy-MM-dd");
+      const key = format(new Date(c.date), "yyyy-MM-dd");
       const list = map.get(key) ?? [];
       list.push(c);
       map.set(key, list);
@@ -178,15 +178,15 @@ export default function AdminCalendarPage() {
                     {dayItems.map((c) => (
                       <div
                         key={c.id}
-                        title={`${c.user?.name ?? "User"} · ${c.text.body.slice(0, 120)}`}
+                        title={`${c.user?.name ?? "User"} · ${c.text.slice(0, 120)}`}
                         className={`truncate rounded border px-1.5 py-0.5 text-[10px] leading-tight ${chipClassForPlatform(c.platform)}`}
                       >
                         <span className="font-medium text-zinc-200">
                           {c.user?.name ?? "—"}
                         </span>
                         <span className="text-zinc-500"> · </span>
-                        {c.text.body.slice(0, 36)}
-                        {c.text.body.length > 36 ? "…" : ""}
+                        {c.text.slice(0, 36)}
+                        {c.text.length > 36 ? "…" : ""}
                       </div>
                     ))}
                   </div>

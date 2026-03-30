@@ -23,10 +23,9 @@ type UserDetail = {
 type ContentSummary = {
   id: string;
   platform?: string;
-  type?: string;
-  timestamp: string;
-  text: { body: string };
-  metrics?: { impressions?: number };
+  date: string;
+  text: string;
+  impressions: number;
 };
 
 function formatIso(iso?: string) {
@@ -370,16 +369,16 @@ export default function AdminUserDetailPage() {
                         className="border-b border-zinc-800/80 last:border-0"
                       >
                         <td className="whitespace-nowrap px-4 py-3 text-zinc-400">
-                          {formatIso(c.timestamp)}
+                          {formatIso(c.date)}
                         </td>
                         <td className="px-4 py-3 text-zinc-300">
                           {c.platform ?? "—"}
                         </td>
                         <td className="max-w-md truncate px-4 py-3 text-zinc-400">
-                          {c.text.body}
+                          {c.text}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-zinc-400">
-                          {c.metrics?.impressions ?? 0}
+                          {c.impressions ?? 0}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <Link

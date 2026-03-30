@@ -1,0 +1,33 @@
+export type ContentRow = {
+  id: string;
+  userId: string;
+  user: { name: string; email: string } | null;
+  platform?: string;
+  externalId?: string;
+  date: string;
+  text: string;
+  url: string;
+  impressions: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  saves: number;
+  followerGain: number;
+  sent: number;
+  primary_job?: string;
+  secondary_jobs?: string[];
+  content_object?: string;
+  primary_format_mechanic?: string;
+  secondary_format_mechanics?: string[];
+  interaction_mode?: string;
+  retrieval_mode?: string;
+  authorship_mode?: string;
+  evidence_mode?: string[];
+  topic_domain?: string;
+  attention_hook?: string[];
+  outcome_driver?: string[];
+  pattern_notes?: string;
+  media_url?: string;
+};
+
+export type UserOption = { id: string; name: string; email: string };

@@ -61,6 +61,7 @@ export type TopicDomain =
   | "daily_life"
   | "lifestyle"
   | "data_engineering"
+  | "professional_skills"
   | "generational_behavior"
   | "society"
   | "platform_behavior";
@@ -70,19 +71,8 @@ export type AttentionHook = string;
 export type OutcomeDriver = string;
 export type FormatMechanic = string;
 
-export type ContentType =
-  | "post"
-  | "reply"
-  | "quote"
-  | "thread"
-  | "reel"
-  | string;
-
-// ─────────────────────────────────────────────
-// Metrics (no nulls — default 0 in schema)
-// ─────────────────────────────────────────────
-
-export interface Metrics {
+/** Flat metric fields (no nested `metrics` object) */
+export interface ContentMetrics {
   impressions: number;
   likes: number;
   replies: number;
@@ -91,81 +81,18 @@ export interface Metrics {
   followerGain: number;
 }
 
-/** Legacy category block (optional; prefer topic_domain + strategy fields) */
-export interface IContentCategory {
-  category?: string;
-  subtype?: string;
-  performanceDriver?: string;
-  categoryReason?: string;
-}
+/** @deprecated Use ContentMetrics */
+export type Metrics = ContentMetrics;
 
-export interface IContentText {
-  body: string;
-  url: string;
-  driveLink?: string;
-}
-
-export interface IContentMedia {
-  urls?: string[];
-}
-
-export interface IContentMetrics extends Metrics {
-  /** @deprecated Prefer `saves`; kept for reads of older documents */
-  saved?: number;
-}
-
-export interface IContentMeta {
-  rawType?: string;
-  sent?: number;
-  extra?: Record<string, unknown>;
-}
-
-/** Serializable content shape (API / analytics); `date` is ISO day string */
-export interface ContentItem {
-  id: string;
-  platform: Platform;
-  date: string;
-
-  primary_job: PrimaryJob;
-  secondary_jobs: PrimaryJob[];
-
-  content_object: ContentObject;
-  primary_format_mechanic: FormatMechanic;
-  secondary_format_mechanics: FormatMechanic[];
-
-  interaction_mode: InteractionMode;
-  retrieval_mode: RetrievalMode;
-
-  authorship_mode: AuthorshipMode;
-  evidence_mode: EvidenceMode[];
-
-  topic_domain: TopicDomain;
-
-  attention_hook: AttentionHook[];
-  outcome_driver: OutcomeDriver[];
-
-  pattern_notes: string;
-
-  text: string;
-  media_url?: string;
-  drive_link?: string;
-  post_link: string;
-
-  metrics: Metrics;
-
-  /** Publishing / distribution type (kept alongside strategy layer) */
-  type: ContentType;
-}
-
-/** Mongoose document: strategy fields + legacy `content` + nested `text` */
-export interface IContent extends Document {
-  user: Types.ObjectId;
-
-  platform?: Platform | string;
-  type?: ContentType;
+/**
+ * Content record shape (DB + API), excluding tenancy:
+ * externalId, platform, date, strategy fields, text, url, flat metrics, sent, media_url.
+ * `user` is required in MongoDB for ownership.
+ */
+export interface ContentFields {
   externalId?: string;
-
-  timestamp: Date;
+  platform?: Platform | string;
+  date: Date;
 
   primary_job?: PrimaryJob;
   secondary_jobs?: PrimaryJob[];
@@ -187,14 +114,29 @@ export interface IContent extends Document {
 
   pattern_notes?: string;
 
-  /** Primary asset URL (optional; additional URLs may live in `media`) */
-  media_url?: string;
+  text: string;
+  url: string;
 
-  content?: IContentCategory;
-  text: IContentText;
-  media?: IContentMedia;
-  metrics: IContentMetrics;
-  meta?: IContentMeta;
+  impressions: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  saves: number;
+  followerGain: number;
+
+  sent: number;
+
+  media_url?: string;
+}
+
+/** Serializable content shape (API); `date` is ISO string */
+export type ContentItem = ContentFields & {
+  id: string;
+  date: string;
+};
+
+export interface IContent extends Document, ContentFields {
+  user: Types.ObjectId;
 
   createdAt: Date;
   updatedAt: Date;
@@ -277,12 +219,13 @@ const TOPIC_DOMAIN_ENUM = [
   "daily_life",
   "lifestyle",
   "data_engineering",
+  "professional_skills",
   "generational_behavior",
   "society",
   "platform_behavior",
 ] as const;
 
-const MetricsSubSchema = {
+const metricFieldSchema = {
   impressions: { type: Number, default: 0, min: 0 },
   likes: { type: Number, default: 0, min: 0 },
   replies: { type: Number, default: 0, min: 0 },
@@ -305,17 +248,12 @@ const ContentSchema = new Schema<IContent>(
       enum: [...PLATFORM_ENUM],
     },
 
-    type: {
-      type: String,
-      enum: ["post", "reply", "quote", "thread", "reel"],
-    },
-
     externalId: {
       type: String,
       sparse: true,
     },
 
-    timestamp: {
+    date: {
       type: Date,
       required: true,
       index: true,
@@ -341,45 +279,25 @@ const ContentSchema = new Schema<IContent>(
 
     pattern_notes: { type: String },
 
+    text: { type: String, required: true },
+    url: { type: String, required: true },
+
+    ...metricFieldSchema,
+
+    sent: { type: Number, default: 0, min: 0 },
+
     media_url: { type: String },
-
-    content: {
-      category: String,
-      subtype: String,
-      performanceDriver: String,
-      categoryReason: String,
-    },
-
-    text: {
-      body: { type: String, required: true },
-      url: { type: String, required: true },
-      driveLink: String,
-    },
-
-    media: {
-      urls: [String],
-    },
-
-    metrics: MetricsSubSchema,
-
-    meta: {
-      rawType: String,
-      sent: { type: Number, default: 0, min: 0 },
-      extra: { type: Schema.Types.Mixed },
-    },
   },
   { timestamps: true },
 );
 
-ContentSchema.index({ user: 1, timestamp: -1 });
+ContentSchema.index({ user: 1, date: -1 });
 ContentSchema.index({ user: 1, platform: 1 });
-ContentSchema.index(
-  { externalId: 1, platform: 1 },
-  { unique: true, sparse: true },
-);
+// Not unique: the same platform post id may appear on multiple rows (e.g. per user or re-imports).
+ContentSchema.index({ externalId: 1, platform: 1 }, { sparse: true });
 
 ContentSchema.post("save", async function (doc: IContent) {
-  const gain = doc.metrics?.followerGain;
+  const gain = doc.followerGain;
   const platform = doc.platform as Platform | undefined;
 
   if (!gain || !platform || !doc.user) return;
@@ -400,6 +318,8 @@ ContentSchema.post("findOneAndUpdate", async function (doc: IContent | null) {
     $inc?: Record<string, unknown>;
   } | null;
   const newGain: number | undefined =
+    (update?.$set?.followerGain as number | undefined) ??
+    (update?.$inc?.followerGain as number | undefined) ??
     (update?.$set?.["metrics.followerGain"] as number | undefined) ??
     (update?.$inc?.["metrics.followerGain"] as number | undefined);
 
@@ -426,16 +346,144 @@ export function parseMetric(value: string | number | undefined | null): number {
   return Math.round(parseFloat(lower)) || 0;
 }
 
-/** Normalize metrics for API: always numbers, never null */
-export function normalizeMetrics(m: Partial<IContentMetrics> | Record<string, unknown> | undefined): Metrics {
+type LegacyText = { body?: string; url?: string; driveLink?: string };
+type LegacyMeta = { sent?: number };
+
+/** Normalize flat metrics; supports legacy nested `metrics` on plain objects */
+export function normalizeMetrics(
+  m: Partial<ContentMetrics> | Record<string, unknown> | undefined,
+): ContentMetrics {
   const x = m ?? {};
+  const nested =
+    typeof (x as { metrics?: unknown }).metrics === "object" &&
+    (x as { metrics?: unknown }).metrics !== null
+      ? ((x as { metrics: Record<string, unknown> }).metrics as Record<string, unknown>)
+      : {};
+  const src: Record<string, unknown> = { ...nested, ...(x as Record<string, unknown>) };
   return {
-    impressions: Number(x.impressions ?? 0) || 0,
-    likes: Number(x.likes ?? 0) || 0,
-    replies: Number(x.replies ?? 0) || 0,
-    reposts: Number(x.reposts ?? 0) || 0,
-    saves: Number(x.saves ?? x.saved ?? 0) || 0,
-    followerGain: Number(x.followerGain ?? 0) || 0,
+    impressions: Number(src.impressions ?? 0) || 0,
+    likes: Number(src.likes ?? 0) || 0,
+    replies: Number(src.replies ?? 0) || 0,
+    reposts: Number(src.reposts ?? 0) || 0,
+    saves: Number(src.saves ?? src.saved ?? 0) || 0,
+    followerGain: Number(src.followerGain ?? 0) || 0,
+  };
+}
+
+function legacyTextBody(c: Record<string, unknown>): string {
+  const t = c.text;
+  if (typeof t === "string") return t;
+  if (t && typeof t === "object" && "body" in t) {
+    return String((t as LegacyText).body ?? "");
+  }
+  return "";
+}
+
+function legacyUrl(c: Record<string, unknown>): string {
+  if (typeof c.url === "string") return c.url;
+  const t = c.text;
+  if (t && typeof t === "object" && "url" in t) {
+    return String((t as LegacyText).url ?? "");
+  }
+  return "";
+}
+
+function legacyDate(c: Record<string, unknown>): Date {
+  const d = c.date ?? c.timestamp;
+  if (d instanceof Date) return d;
+  return new Date(String(d));
+}
+
+function legacySent(c: Record<string, unknown>): number {
+  if (typeof c.sent === "number") return c.sent;
+  const meta = c.meta;
+  if (meta && typeof meta === "object" && "sent" in meta) {
+    return Number((meta as LegacyMeta).sent ?? 0) || 0;
+  }
+  return 0;
+}
+
+/** Shape returned by list/detail content APIs (includes tenancy + timestamps) */
+export type ContentApiPayload = {
+  id: string;
+  userId: string;
+  user: { name: string; email: string } | null;
+  externalId?: string;
+  platform?: string;
+  date: string;
+  primary_job?: PrimaryJob;
+  secondary_jobs?: PrimaryJob[];
+  content_object?: ContentObject;
+  primary_format_mechanic?: FormatMechanic;
+  secondary_format_mechanics?: FormatMechanic[];
+  interaction_mode?: InteractionMode;
+  retrieval_mode?: RetrievalMode;
+  authorship_mode?: AuthorshipMode;
+  evidence_mode?: EvidenceMode[];
+  topic_domain?: TopicDomain;
+  attention_hook?: AttentionHook[];
+  outcome_driver?: OutcomeDriver[];
+  pattern_notes?: string;
+  text: string;
+  url: string;
+  impressions: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  saves: number;
+  followerGain: number;
+  sent: number;
+  media_url?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export function contentLeanToApiPayload(
+  c: Record<string, unknown>,
+  opts: {
+    userId: string;
+    user: { name: string; email: string } | null;
+  },
+): ContentApiPayload {
+  const metrics = normalizeMetrics(c);
+  const rawDate = legacyDate(c);
+  return {
+    id: String(c._id),
+    userId: opts.userId,
+    user: opts.user,
+    externalId: c.externalId as string | undefined,
+    platform: c.platform as string | undefined,
+    date: Number.isNaN(rawDate.getTime()) ? new Date(0).toISOString() : rawDate.toISOString(),
+    primary_job: c.primary_job as PrimaryJob | undefined,
+    secondary_jobs: c.secondary_jobs as PrimaryJob[] | undefined,
+    content_object: c.content_object as ContentObject | undefined,
+    primary_format_mechanic: c.primary_format_mechanic as string | undefined,
+    secondary_format_mechanics: c.secondary_format_mechanics as string[] | undefined,
+    interaction_mode: c.interaction_mode as InteractionMode | undefined,
+    retrieval_mode: c.retrieval_mode as RetrievalMode | undefined,
+    authorship_mode: c.authorship_mode as AuthorshipMode | undefined,
+    evidence_mode: c.evidence_mode as EvidenceMode[] | undefined,
+    topic_domain: c.topic_domain as TopicDomain | undefined,
+    attention_hook: c.attention_hook as string[] | undefined,
+    outcome_driver: c.outcome_driver as string[] | undefined,
+    pattern_notes: c.pattern_notes as string | undefined,
+    text: legacyTextBody(c),
+    url: legacyUrl(c),
+    ...metrics,
+    sent: legacySent(c),
+    media_url: c.media_url as string | undefined,
+    createdAt:
+      c.createdAt instanceof Date
+        ? c.createdAt.toISOString()
+        : c.createdAt != null
+          ? String(c.createdAt)
+          : undefined,
+    updatedAt:
+      c.updatedAt instanceof Date
+        ? c.updatedAt.toISOString()
+        : c.updatedAt != null
+          ? String(c.updatedAt)
+          : undefined,
   };
 }
 

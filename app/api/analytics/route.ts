@@ -6,8 +6,29 @@ import User from "@/app/User";
 
 export const runtime = "nodejs";
 
-/** Sum saves from new (`metrics.saves`) or legacy (`metrics.saved`) documents */
-const METRIC_SAVES = { $ifNull: ["$metrics.saves", "$metrics.saved", 0] };
+/** Posted-at: `date` (new) or legacy `timestamp` */
+const D = { $ifNull: ["$date", "$timestamp"] };
+
+/** Flat metrics (new) or legacy nested `metrics` */
+const IMP = { $ifNull: ["$impressions", { $ifNull: ["$metrics.impressions", 0] }] };
+const LIK = { $ifNull: ["$likes", { $ifNull: ["$metrics.likes", 0] }] };
+const REP = { $ifNull: ["$replies", { $ifNull: ["$metrics.replies", 0] }] };
+const REPST = { $ifNull: ["$reposts", { $ifNull: ["$metrics.reposts", 0] }] };
+const FG = { $ifNull: ["$followerGain", { $ifNull: ["$metrics.followerGain", 0] }] };
+const METRIC_SAVES = {
+  $ifNull: [
+    "$saves",
+    { $ifNull: ["$metrics.saves", { $ifNull: ["$metrics.saved", 0] }] },
+  ],
+};
+
+const CONTENT_OBJECT_VALUES = new Set([
+  "single_post",
+  "short_video",
+  "carousel",
+  "thread",
+  "quote_post",
+]);
 
 function startOfDay(d: Date) {
   const x = new Date(d);
@@ -24,7 +45,6 @@ function endOfDay(d: Date) {
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 function mongoDayIndexToLabel(day: number): string {
-  // MongoDB $dayOfWeek: 1 = Sunday … 7 = Saturday
   const idx = day >= 1 && day <= 7 ? day - 1 : 0;
   return DAY_LABELS[idx] ?? "?";
 }
@@ -34,13 +54,22 @@ type MatchFilter = {
   to: Date;
   platforms?: string[];
   userId?: string;
-  contentType?: string;
+  contentObject?: string;
   minImpressions?: number;
 };
 
 function buildMatch(f: MatchFilter): Record<string, unknown> {
+  const exprParts: Record<string, unknown>[] = [
+    { $gte: [D, f.from] },
+    { $lte: [D, f.to] },
+  ];
+  if (f.minImpressions != null && f.minImpressions > 0) {
+    exprParts.push({
+      $gte: [IMP, f.minImpressions],
+    });
+  }
   const match: Record<string, unknown> = {
-    timestamp: { $gte: f.from, $lte: f.to },
+    $expr: { $and: exprParts },
   };
   if (f.platforms?.length) {
     match.platform = { $in: f.platforms };
@@ -48,11 +77,8 @@ function buildMatch(f: MatchFilter): Record<string, unknown> {
   if (f.userId) {
     match.user = new Types.ObjectId(f.userId);
   }
-  if (f.contentType) {
-    match.type = f.contentType;
-  }
-  if (f.minImpressions != null && f.minImpressions > 0) {
-    match["metrics.impressions"] = { $gte: f.minImpressions };
+  if (f.contentObject) {
+    match.content_object = f.contentObject;
   }
   return match;
 }
@@ -63,17 +89,26 @@ async function aggregateTotals(match: Record<string, unknown>) {
     {
       $group: {
         _id: null,
-        totalImpressions: { $sum: { $ifNull: ["$metrics.impressions", 0] } },
-        totalLikes: { $sum: { $ifNull: ["$metrics.likes", 0] } },
-        totalReplies: { $sum: { $ifNull: ["$metrics.replies", 0] } },
-        totalReposts: { $sum: { $ifNull: ["$metrics.reposts", 0] } },
+        totalImpressions: { $sum: IMP },
+        totalLikes: { $sum: LIK },
+        totalReplies: { $sum: REP },
+        totalReposts: { $sum: REPST },
         totalSaves: { $sum: METRIC_SAVES },
-        followerGrowth: { $sum: { $ifNull: ["$metrics.followerGain", 0] } },
+        followerGrowth: { $sum: FG },
         postCount: { $sum: 1 },
       },
     },
   ]);
   return agg;
+}
+
+function textPreview(c: Record<string, unknown>): string {
+  const t = c.text;
+  if (typeof t === "string") return t;
+  if (t && typeof t === "object" && "body" in t) {
+    return String((t as { body?: string }).body ?? "");
+  }
+  return "";
 }
 
 export async function GET(req: Request) {
@@ -105,10 +140,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
-    const contentType = searchParams.get("type")?.trim() || undefined;
-    const validTypes = new Set(["post", "reply", "quote", "thread", "reel"]);
-    if (contentType && !validTypes.has(contentType)) {
-      return NextResponse.json({ error: "Invalid content type" }, { status: 400 });
+    const contentObject = searchParams.get("contentObject")?.trim() || undefined;
+    if (contentObject && !CONTENT_OBJECT_VALUES.has(contentObject)) {
+      return NextResponse.json({ error: "Invalid contentObject" }, { status: 400 });
     }
 
     const minImpressionsRaw = searchParams.get("minImpressions");
@@ -139,7 +173,7 @@ export async function GET(req: Request) {
       to,
       platforms,
       userId,
-      contentType,
+      contentObject,
       minImpressions,
     };
 
@@ -164,25 +198,21 @@ export async function GET(req: Request) {
       {
         $group: {
           _id: {
-            y: { $year: "$timestamp" },
-            m: { $month: "$timestamp" },
-            d: { $dayOfMonth: "$timestamp" },
+            y: { $year: D },
+            m: { $month: D },
+            d: { $dayOfMonth: D },
           },
-          impressions: { $sum: { $ifNull: ["$metrics.impressions", 0] } },
-          likes: { $sum: { $ifNull: ["$metrics.likes", 0] } },
-          replies: { $sum: { $ifNull: ["$metrics.replies", 0] } },
-          reposts: { $sum: { $ifNull: ["$metrics.reposts", 0] } },
+          impressions: { $sum: IMP },
+          likes: { $sum: LIK },
+          replies: { $sum: REP },
+          reposts: { $sum: REPST },
           saves: { $sum: METRIC_SAVES },
           engagement: {
             $sum: {
-              $add: [
-                { $ifNull: ["$metrics.likes", 0] },
-                { $ifNull: ["$metrics.replies", 0] },
-                { $ifNull: ["$metrics.reposts", 0] },
-              ],
+              $add: [LIK, REP, REPST],
             },
           },
-          followerGain: { $sum: { $ifNull: ["$metrics.followerGain", 0] } },
+          followerGain: { $sum: FG },
           posts: { $sum: 1 },
         },
       },
@@ -210,20 +240,16 @@ export async function GET(req: Request) {
       {
         $group: {
           _id: "$platform",
-          impressions: { $sum: { $ifNull: ["$metrics.impressions", 0] } },
-          likes: { $sum: { $ifNull: ["$metrics.likes", 0] } },
-          replies: { $sum: { $ifNull: ["$metrics.replies", 0] } },
-          reposts: { $sum: { $ifNull: ["$metrics.reposts", 0] } },
+          impressions: { $sum: IMP },
+          likes: { $sum: LIK },
+          replies: { $sum: REP },
+          reposts: { $sum: REPST },
           saves: { $sum: METRIC_SAVES },
-          followerGain: { $sum: { $ifNull: ["$metrics.followerGain", 0] } },
+          followerGain: { $sum: FG },
           posts: { $sum: 1 },
           engagement: {
             $sum: {
-              $add: [
-                { $ifNull: ["$metrics.likes", 0] },
-                { $ifNull: ["$metrics.replies", 0] },
-                { $ifNull: ["$metrics.reposts", 0] },
-              ],
+              $add: [LIK, REP, REPST],
             },
           },
         },
@@ -256,18 +282,14 @@ export async function GET(req: Request) {
       {
         $group: {
           _id: "$user",
-          impressions: { $sum: { $ifNull: ["$metrics.impressions", 0] } },
+          impressions: { $sum: IMP },
           engagement: {
             $sum: {
-              $add: [
-                { $ifNull: ["$metrics.likes", 0] },
-                { $ifNull: ["$metrics.replies", 0] },
-                { $ifNull: ["$metrics.reposts", 0] },
-              ],
+              $add: [LIK, REP, REPST],
             },
           },
           posts: { $sum: 1 },
-          followerGain: { $sum: { $ifNull: ["$metrics.followerGain", 0] } },
+          followerGain: { $sum: FG },
         },
       },
       { $sort: { impressions: -1 } },
@@ -310,20 +332,16 @@ export async function GET(req: Request) {
       };
     });
 
-    const byContentType = await Content.aggregate([
+    const byContentObjectAgg = await Content.aggregate([
       { $match: match },
       {
         $group: {
-          _id: "$type",
-          impressions: { $sum: { $ifNull: ["$metrics.impressions", 0] } },
+          _id: { $ifNull: ["$content_object", "unknown"] },
+          impressions: { $sum: IMP },
           posts: { $sum: 1 },
           engagement: {
             $sum: {
-              $add: [
-                { $ifNull: ["$metrics.likes", 0] },
-                { $ifNull: ["$metrics.replies", 0] },
-                { $ifNull: ["$metrics.reposts", 0] },
-              ],
+              $add: [LIK, REP, REPST],
             },
           },
         },
@@ -331,8 +349,8 @@ export async function GET(req: Request) {
       { $sort: { impressions: -1 } },
     ]);
 
-    const typeRows = byContentType.map((t) => ({
-      type: (t._id as string) ?? "unknown",
+    const contentObjectRows = byContentObjectAgg.map((t) => ({
+      contentObject: (t._id as string) ?? "unknown",
       impressions: t.impressions as number,
       posts: t.posts as number,
       engagement: t.engagement as number,
@@ -346,16 +364,12 @@ export async function GET(req: Request) {
       { $match: match },
       {
         $group: {
-          _id: { $dayOfWeek: "$timestamp" },
-          impressions: { $sum: { $ifNull: ["$metrics.impressions", 0] } },
+          _id: { $dayOfWeek: D },
+          impressions: { $sum: IMP },
           posts: { $sum: 1 },
           engagement: {
             $sum: {
-              $add: [
-                { $ifNull: ["$metrics.likes", 0] },
-                { $ifNull: ["$metrics.replies", 0] },
-                { $ifNull: ["$metrics.reposts", 0] },
-              ],
+              $add: [LIK, REP, REPST],
             },
           },
         },
@@ -378,8 +392,8 @@ export async function GET(req: Request) {
       { $match: match },
       {
         $group: {
-          _id: { $hour: "$timestamp" },
-          impressions: { $sum: { $ifNull: ["$metrics.impressions", 0] } },
+          _id: { $hour: D },
+          impressions: { $sum: IMP },
           posts: { $sum: 1 },
         },
       },
@@ -403,12 +417,12 @@ export async function GET(req: Request) {
       {
         $group: {
           _id: {
-            y: { $year: "$timestamp" },
-            m: { $month: "$timestamp" },
-            d: { $dayOfMonth: "$timestamp" },
+            y: { $year: D },
+            m: { $month: D },
+            d: { $dayOfMonth: D },
             platform: "$platform",
           },
-          impressions: { $sum: { $ifNull: ["$metrics.impressions", 0] } },
+          impressions: { $sum: IMP },
         },
       },
       { $sort: { "_id.y": 1, "_id.m": 1, "_id.d": 1 } },
@@ -448,11 +462,11 @@ export async function GET(req: Request) {
       {
         $group: {
           _id: {
-            y: { $isoWeekYear: "$timestamp" },
-            w: { $isoWeek: "$timestamp" },
+            y: { $isoWeekYear: D },
+            w: { $isoWeek: D },
             platform: "$platform",
           },
-          followerGain: { $sum: { $ifNull: ["$metrics.followerGain", 0] } },
+          followerGain: { $sum: FG },
         },
       },
       { $sort: { "_id.y": 1, "_id.w": 1 } },
@@ -489,14 +503,9 @@ export async function GET(req: Request) {
       { $match: match },
       {
         $group: {
-          _id: {
-            $ifNull: [
-              "$topic_domain",
-              { $ifNull: ["$content.category", "Uncategorized"] },
-            ],
-          },
+          _id: { $ifNull: ["$topic_domain", "Uncategorized"] },
           posts: { $sum: 1 },
-          impressions: { $sum: { $ifNull: ["$metrics.impressions", 0] } },
+          impressions: { $sum: IMP },
         },
       },
       { $sort: { impressions: -1 } },
@@ -528,28 +537,34 @@ export async function GET(req: Request) {
       followersByPlatform[String(f._id)] = f.count as number;
     }
 
-    const topPosts = await Content.find(match)
-      .sort({ "metrics.impressions": -1 })
-      .limit(topLimit)
-      .populate("user", "name")
-      .lean();
-
-    const top = topPosts.map((c) => ({
-      id: String(c._id),
-      title: c.text?.body?.slice(0, 120) ?? "(no body)",
-      impressions: c.metrics?.impressions ?? 0,
-      likes: c.metrics?.likes ?? 0,
-      replies: c.metrics?.replies ?? 0,
-      reposts: c.metrics?.reposts ?? 0,
-      saves: normalizeMetrics(c.metrics as unknown as Record<string, unknown>).saves,
-      platform: c.platform,
-      type: c.type,
-      timestamp: c.timestamp,
-      userName:
-        c.user && typeof c.user === "object" && "name" in c.user
-          ? (c.user as { name: string }).name
-          : undefined,
-    }));
+    const topPostsRaw = await Content.find(match).populate("user", "name").lean();
+    const sortedTop = [...topPostsRaw].sort(
+      (a, b) =>
+        normalizeMetrics(b as unknown as Record<string, unknown>).impressions -
+        normalizeMetrics(a as unknown as Record<string, unknown>).impressions,
+    );
+    const top = sortedTop.slice(0, topLimit).map((doc) => {
+      const c = doc as unknown as Record<string, unknown>;
+      const m = normalizeMetrics(c);
+      const rawDate = c.date ?? c.timestamp;
+      const ts = rawDate instanceof Date ? rawDate : new Date(String(rawDate));
+      return {
+        id: String(c._id),
+        title: textPreview(c).slice(0, 120) || "(no text)",
+        impressions: m.impressions,
+        likes: m.likes,
+        replies: m.replies,
+        reposts: m.reposts,
+        saves: m.saves,
+        platform: c.platform as string | undefined,
+        content_object: c.content_object as string | undefined,
+        date: Number.isNaN(ts.getTime()) ? new Date(0).toISOString() : ts.toISOString(),
+        userName:
+          c.user && typeof c.user === "object" && "name" in c.user
+            ? (c.user as { name: string }).name
+            : undefined,
+      };
+    });
 
     const users = await User.find().lean();
     const followerGrowthTotal = users.reduce((acc, u) => {
@@ -620,7 +635,7 @@ export async function GET(req: Request) {
       filters: {
         platforms: platforms ?? null,
         userId: userId ?? null,
-        type: contentType ?? null,
+        contentObject: contentObject ?? null,
         minImpressions: minImpressions ?? null,
         compareWithPrevious: comparePrev,
         topLimit,
@@ -642,7 +657,7 @@ export async function GET(req: Request) {
       daily: dailySeries,
       byPlatform: platformBars,
       byUser: byUserRows,
-      byContentType: typeRows,
+      byContentObject: contentObjectRows,
       byDayOfWeek: dowRows,
       byHour: hourRows,
       topPosts: top,

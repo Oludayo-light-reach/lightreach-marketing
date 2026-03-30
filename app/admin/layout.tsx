@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AdminToaster } from "@/components/admin/admin-toaster";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminTopbar } from "@/components/admin/admin-topbar";
 
@@ -20,6 +21,7 @@ export default function AdminLayout({
       <AdminSidebar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AdminTopbar />
+        <AdminToaster />
         <main className="pulse-admin-page min-h-0 flex-1 overflow-y-auto px-5 py-6 pb-12 sm:px-7 sm:py-7">
           {children}
         </main>

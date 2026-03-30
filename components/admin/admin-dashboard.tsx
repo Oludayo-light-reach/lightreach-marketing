@@ -58,8 +58,8 @@ type AnalyticsResponse = {
     saves: number;
   }[];
   byPlatform: PlatformRow[];
-  byContentType: {
-    type: string;
+  byContentObject: {
+    contentObject: string;
     impressions: number;
     posts: number;
     engagement: number;
@@ -79,8 +79,8 @@ type AnalyticsResponse = {
     likes: number;
     reposts: number;
     platform?: string;
-    type?: string;
-    timestamp: string;
+    content_object?: string;
+    date: string;
   }[];
   comparison: {
     delta: {
@@ -97,12 +97,12 @@ type AnalyticsResponse = {
 };
 
 const CHART_PLATFORMS = ["X", "LinkedIn", "Instagram", "Threads"] as const;
-const TYPE_COLORS: Record<string, string> = {
-  post: "#a78bfa",
+const OBJECT_COLORS: Record<string, string> = {
+  single_post: "#a78bfa",
   thread: "#38bdf8",
-  reel: "#34d399",
-  reply: "#fb923c",
-  quote: "#f472b6",
+  short_video: "#34d399",
+  carousel: "#fb923c",
+  quote_post: "#f472b6",
 };
 const LINE_COLORS: Record<string, string> = {
   X: "#38bdf8",
@@ -342,13 +342,15 @@ export function AdminDashboard() {
     [data],
   );
 
-  const contentTypePie = useMemo(() => {
-    if (!data?.byContentType?.length) return [];
-    const total = data.byContentType.reduce((s, t) => s + t.posts, 0) || 1;
-    return data.byContentType.map((t, i) => ({
-      name: t.type ? t.type.charAt(0).toUpperCase() + t.type.slice(1) : "Unknown",
+  const contentObjectPie = useMemo(() => {
+    if (!data?.byContentObject?.length) return [];
+    const total = data.byContentObject.reduce((s, t) => s + t.posts, 0) || 1;
+    return data.byContentObject.map((t, i) => ({
+      name: t.contentObject
+        ? t.contentObject.replace(/_/g, " ")
+        : "Unknown",
       value: Math.round((t.posts / total) * 100),
-      color: TYPE_COLORS[t.type] ?? `hsl(${(i * 47) % 360}, 70%, 65%)`,
+      color: OBJECT_COLORS[t.contentObject] ?? `hsl(${(i * 47) % 360}, 70%, 65%)`,
       posts: t.posts,
     }));
   }, [data]);
@@ -699,13 +701,13 @@ export function AdminDashboard() {
               </div>
 
               <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
-                <SectionHeader title="Content Mix" sub="Share of posts by type" />
-                {contentTypePie.length > 0 ? (
+                <SectionHeader title="Content mix" sub="Share of posts by content object" />
+                {contentObjectPie.length > 0 ? (
                   <>
                     <ResponsiveContainer width="100%" height={160}>
                       <PieChart>
                         <Pie
-                          data={contentTypePie}
+                          data={contentObjectPie}
                           cx="50%"
                           cy="50%"
                           innerRadius={48}
@@ -713,7 +715,7 @@ export function AdminDashboard() {
                           paddingAngle={3}
                           dataKey="value"
                         >
-                          {contentTypePie.map((entry, index) => (
+                          {contentObjectPie.map((entry, index) => (
                             <Cell
                               key={index}
                               fill={entry.color}
@@ -725,7 +727,7 @@ export function AdminDashboard() {
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="mt-2 space-y-1.5">
-                      {contentTypePie.map((item) => (
+                      {contentObjectPie.map((item) => (
                         <div
                           key={item.name}
                           className="flex items-center justify-between"
@@ -927,7 +929,7 @@ export function AdminDashboard() {
                 </ResponsiveContainer>
               ) : (
                 <p className="py-10 text-center text-sm text-white/30">
-                  No categories — set `topic_domain` or legacy `content.category`.
+                  No categories — set `topic_domain` on content.
                 </p>
               )}
             </div>
@@ -950,10 +952,10 @@ export function AdminDashboard() {
                       <div className="mb-1.5 flex flex-wrap items-center gap-2">
                         <PlatformBadge platform={item.platform ?? "?"} />
                         <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/30">
-                          {item.type ?? "—"}
+                          {item.content_object?.replace(/_/g, " ") ?? "—"}
                         </span>
                         <span className="text-[10px] text-white/20">
-                          {format(new Date(item.timestamp), "MMM d")}
+                          {format(new Date(item.date), "MMM d")}
                         </span>
                       </div>
                       <p className="line-clamp-2 text-sm text-white/60">

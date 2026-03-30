@@ -19,6 +19,35 @@ if (!global.mongooseCache) {
   global.mongooseCache = cache;
 }
 
+const CONTENTS_COLLECTION = "contents";
+const EXTERNAL_ID_PLATFORM_INDEX = "externalId_1_platform_1";
+
+/**
+ * Drops legacy unique index on { externalId, platform } if present so duplicate
+ * platform ids are allowed (matches Content schema — non-unique sparse index).
+ */
+async function migrateContentsExternalIdIndexIfNeeded(): Promise<void> {
+  const db = mongoose.connection.db;
+  if (!db) return;
+
+  try {
+    const coll = db.collection(CONTENTS_COLLECTION);
+    const indexes = await coll.indexes();
+    const existing = indexes.find((i) => i.name === EXTERNAL_ID_PLATFORM_INDEX);
+    if (existing && "unique" in existing && existing.unique) {
+      await coll.dropIndex(EXTERNAL_ID_PLATFORM_INDEX);
+      await coll.createIndex(
+        { externalId: 1, platform: 1 },
+        { sparse: true, name: EXTERNAL_ID_PLATFORM_INDEX },
+      );
+    }
+  } catch (err) {
+    const msg = String(err);
+    if (msg.includes("index not found") || msg.includes("ns not found")) return;
+    console.warn("[mongodb] migrateContentsExternalIdIndexIfNeeded:", err);
+  }
+}
+
 export async function connectDB(): Promise<typeof mongoose> {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
@@ -39,5 +68,6 @@ export async function connectDB(): Promise<typeof mongoose> {
   }
 
   cache.conn = await cache.promise;
+  await migrateContentsExternalIdIndexIfNeeded();
   return cache.conn;
 }

@@ -11,30 +11,17 @@ type ContentDetail = {
   userId: string;
   user: { name: string; email: string } | null;
   platform?: string;
-  type?: string;
   externalId?: string;
-  timestamp: string;
-  content?: {
-    category?: string;
-    subtype?: string;
-    performanceDriver?: string;
-    categoryReason?: string;
-  };
-  text: { body: string; url: string; driveLink?: string };
-  media?: { urls?: string[] };
-  metrics: {
-    impressions: number;
-    likes: number;
-    replies: number;
-    reposts: number;
-    saves: number;
-    followerGain: number;
-  };
-  meta?: {
-    rawType?: string;
-    sent?: number;
-    extra?: Record<string, unknown>;
-  };
+  date: string;
+  text: string;
+  url: string;
+  impressions: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  saves: number;
+  followerGain: number;
+  sent: number;
   primary_job?: string;
   secondary_jobs?: string[];
   content_object?: string;
@@ -182,14 +169,14 @@ export default function AdminContentDetailPage() {
                 {c.platform}
               </span>
             )}
-            {c?.type && (
+            {c?.content_object && (
               <span className="rounded border border-zinc-700 bg-zinc-800/80 px-2 py-0.5 text-xs text-zinc-300">
-                {c.type}
+                {humanizeEnum(c.content_object)}
               </span>
             )}
           </div>
           <p className="mt-1 text-sm text-zinc-500">
-            Full record: strategy fields, text, metrics, and metadata.
+            Strategy fields, text, URL, metrics, and media.
           </p>
         </div>
         {c && (
@@ -243,9 +230,9 @@ export default function AdminContentDetailPage() {
                   <span className="text-zinc-500">—</span>
                 )}
               </Field>
-              <Field label="Posted at">{formatIso(c.timestamp)}</Field>
-              <Field label="Platform / type">
-                {(c.platform ?? "—") + " · " + (c.type ?? "—")}
+              <Field label="Posted at">{formatIso(c.date)}</Field>
+              <Field label="Platform">
+                {c.platform ?? "—"}
               </Field>
               <Field label="Primary media URL" wide>
                 {c.media_url ? (
@@ -405,99 +392,40 @@ export default function AdminContentDetailPage() {
             </dl>
           </Section>
 
-          <Section title="Legacy category (content block)">
-            {c.content &&
-            (c.content.category ||
-              c.content.subtype ||
-              c.content.performanceDriver ||
-              c.content.categoryReason) ? (
-              <dl className="grid gap-4 sm:grid-cols-2">
-                <Field label="Category">{c.content.category ?? "—"}</Field>
-                <Field label="Subtype">{c.content.subtype ?? "—"}</Field>
-                <Field label="Performance driver" wide>
-                  {c.content.performanceDriver ?? "—"}
-                </Field>
-                <Field label="Category reason" wide>
-                  {c.content.categoryReason ?? "—"}
-                </Field>
-              </dl>
-            ) : (
-              <p className="text-sm text-zinc-500">
-                No legacy category fields on this document.
-              </p>
-            )}
-          </Section>
-
           <Section title="Text & links">
             <div className="space-y-4">
               <div>
-                <dt className="text-xs font-medium text-zinc-500">Body</dt>
+                <dt className="text-xs font-medium text-zinc-500">Text</dt>
                 <dd className="mt-2 whitespace-pre-wrap rounded-lg border border-zinc-800 bg-zinc-950/50 p-4 text-sm text-zinc-200">
-                  {c.text.body}
+                  {c.text}
                 </dd>
               </div>
               <dl className="grid gap-4 sm:grid-cols-2">
-                <Field label="Post URL" wide>
+                <Field label="URL" wide>
                   <a
-                    href={c.text.url}
+                    href={c.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="break-all text-sky-400 hover:text-sky-300"
                   >
-                    {c.text.url}
+                    {c.url}
                   </a>
-                </Field>
-                <Field label="Drive link" wide>
-                  {c.text.driveLink ? (
-                    <a
-                      href={c.text.driveLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="break-all text-sky-400 hover:text-sky-300"
-                    >
-                      {c.text.driveLink}
-                    </a>
-                  ) : (
-                    <span className="text-zinc-500">—</span>
-                  )}
                 </Field>
               </dl>
             </div>
           </Section>
 
-          <Section title="Media">
-            {c.media?.urls?.filter(Boolean).length ? (
-              <ul className="space-y-2">
-                {c.media.urls!.map((u, i) => (
-                  <li key={i}>
-                    <a
-                      href={u}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="break-all font-mono text-xs text-sky-400 hover:text-sky-300"
-                    >
-                      {u}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-zinc-500">
-                No additional media URLs in `media.urls`.
-              </p>
-            )}
-          </Section>
-
           <Section title="Metrics">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 md:grid-cols-8">
               {(
                 [
-                  ["impressions", c.metrics.impressions],
-                  ["likes", c.metrics.likes],
-                  ["replies", c.metrics.replies],
-                  ["reposts", c.metrics.reposts],
-                  ["saves", c.metrics.saves],
-                  ["follower gain", c.metrics.followerGain],
+                  ["impressions", c.impressions],
+                  ["likes", c.likes],
+                  ["replies", c.replies],
+                  ["reposts", c.reposts],
+                  ["saves", c.saves],
+                  ["follower gain", c.followerGain],
+                  ["sent", c.sent],
                 ] as const
               ).map(([label, val]) => (
                 <div
@@ -515,32 +443,10 @@ export default function AdminContentDetailPage() {
             </div>
           </Section>
 
-          <Section title="Meta">
+          <Section title="Record">
             <dl className="grid gap-4 sm:grid-cols-2">
-              <Field label="Raw type">
-                {c.meta?.rawType ?? "—"}
-              </Field>
-              <Field label="Sent">
-                {c.meta?.sent != null
-                  ? String(c.meta.sent)
-                  : "—"}
-              </Field>
-              <Field label="Extra (JSON)" wide>
-                {c.meta?.extra && Object.keys(c.meta.extra).length > 0 ? (
-                  <pre className="max-h-64 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs text-zinc-300">
-                    {JSON.stringify(c.meta.extra, null, 2)}
-                  </pre>
-                ) : (
-                  <span className="text-zinc-500">—</span>
-                )}
-              </Field>
-            </dl>
-          </Section>
-
-          <Section title="System">
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <Field label="Created in DB">{formatIso(c.createdAt)}</Field>
-              <Field label="Last updated in DB">{formatIso(c.updatedAt)}</Field>
+              <Field label="Created">{formatIso(c.createdAt)}</Field>
+              <Field label="Updated">{formatIso(c.updatedAt)}</Field>
             </dl>
           </Section>
         </div>
