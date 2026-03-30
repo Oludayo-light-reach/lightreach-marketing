@@ -57,3 +57,31 @@ body {
 .font-dm-mono {
   font-family: var(--font-dm-mono), ui-monospace, monospace;
 }
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Style the scrollbar track */
+::-webkit-scrollbar {
+  width: 2px; /* vertical scrollbar */
+  height: 2px; /* horizontal scrollbar */
+  color: #fa0100;
+}
+
+/* Scrollbar track (background) */
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+/* Scrollbar thumb (the moving handle) */
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
+
+/* Scrollbar thumb on hover */
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
