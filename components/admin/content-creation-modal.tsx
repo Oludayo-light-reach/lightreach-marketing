@@ -1,11 +1,11 @@
 "use client";
 
+import type { ContentRow, UserOption } from "@/app/admin/content/content-types";
 import {
   DateFieldModal,
   defaultLocalDatetimeString,
   toLocalDatetimeInputValue,
 } from "@/components/date-field-modal";
-import type { ContentRow, UserOption } from "@/app/admin/content/content-types";
 import {
   CONTENT_CSV_TEMPLATE_HEADERS,
   csvRowToContentBody,
@@ -79,7 +79,10 @@ const TOPIC_DOMAINS = [
 ] as const;
 
 function linesToArray(s: string): string[] {
-  return s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return s
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
 }
 
 function joinLines(arr: string[] | undefined): string {
@@ -143,10 +146,9 @@ export function ContentCreationModal({
 }: ContentCreationModalProps) {
   const [createMode, setCreateMode] = useState<CreateMode>("choose");
   const [bulkUserId, setBulkUserId] = useState("");
-  const [spreadsheetParsed, setSpreadsheetParsed] = useState<Record<
-    string,
-    string
-  >[]>([]);
+  const [spreadsheetParsed, setSpreadsheetParsed] = useState<
+    Record<string, string>[]
+  >([]);
   const [spreadsheetFileName, setSpreadsheetFileName] = useState("");
   const [bulkImporting, setBulkImporting] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
@@ -167,7 +169,9 @@ export function ContentCreationModal({
         secondary_jobs: joinLines(editing.secondary_jobs),
         content_object: editing.content_object ?? "",
         primary_format_mechanic: editing.primary_format_mechanic ?? "",
-        secondary_format_mechanics: joinLines(editing.secondary_format_mechanics),
+        secondary_format_mechanics: joinLines(
+          editing.secondary_format_mechanics,
+        ),
         interaction_mode: editing.interaction_mode ?? "",
         retrieval_mode: editing.retrieval_mode ?? "",
         authorship_mode: editing.authorship_mode ?? "",
@@ -340,7 +344,9 @@ export function ContentCreationModal({
       saves: Number(form.saves) || 0,
       followerGain: Number(form.followerGain) || 0,
       sent: Number(form.sent) || 0,
-      ...(trim(form.primary_job) ? { primary_job: trim(form.primary_job) } : {}),
+      ...(trim(form.primary_job)
+        ? { primary_job: trim(form.primary_job) }
+        : {}),
       ...(secondaryJobsParsed.length
         ? { secondary_jobs: secondaryJobsParsed }
         : {}),
@@ -369,14 +375,18 @@ export function ContentCreationModal({
       ...(form.evidenceModes.length
         ? { evidence_mode: form.evidenceModes }
         : {}),
-      ...(trim(form.topic_domain) ? { topic_domain: trim(form.topic_domain) } : {}),
+      ...(trim(form.topic_domain)
+        ? { topic_domain: trim(form.topic_domain) }
+        : {}),
       ...(linesToArray(form.attention_hook).length
         ? { attention_hook: linesToArray(form.attention_hook) }
         : {}),
       ...(linesToArray(form.outcome_driver).length
         ? { outcome_driver: linesToArray(form.outcome_driver) }
         : {}),
-      ...(trim(form.pattern_notes) ? { pattern_notes: trim(form.pattern_notes) } : {}),
+      ...(trim(form.pattern_notes)
+        ? { pattern_notes: trim(form.pattern_notes) }
+        : {}),
       ...(trim(form.media_url) ? { media_url: trim(form.media_url) } : {}),
     };
 
@@ -500,8 +510,8 @@ export function ContentCreationModal({
                   <strong className="text-zinc-300">date</strong>,{" "}
                   <strong className="text-zinc-300">text</strong>, and{" "}
                   <strong className="text-zinc-300">url</strong> unless you rely
-                  on the default user only (userId column optional if you set the
-                  default below).
+                  on the default user only (userId column optional if you set
+                  the default below).
                 </p>
                 <label className="block text-xs font-medium text-zinc-500">
                   Default user (for rows without a userId column)
@@ -543,8 +553,8 @@ export function ContentCreationModal({
                 </label>
                 {spreadsheetFileName ? (
                   <p className="text-xs text-zinc-500">
-                    Loaded: {spreadsheetFileName} —{" "}
-                    {spreadsheetParsed.length} row(s)
+                    Loaded: {spreadsheetFileName} — {spreadsheetParsed.length}{" "}
+                    row(s)
                   </p>
                 ) : null}
                 {bulkMessage ? (
@@ -552,37 +562,33 @@ export function ContentCreationModal({
                 ) : null}
                 {spreadsheetParsed.length > 0 && (
                   <div className="overflow-x-auto rounded-lg border border-zinc-800">
-                    <table className="w-full min-w-[32rem] text-left text-xs text-zinc-400">
+                    <table className="w-full min-w-max text-left text-xs text-zinc-400">
                       <thead>
                         <tr className="border-b border-zinc-800">
-                          {Object.keys(spreadsheetParsed[0] ?? {})
-                            .slice(0, 8)
-                            .map((k) => (
-                              <th
-                                key={k}
-                                className="px-2 py-2 font-medium text-zinc-500"
-                              >
-                                {k}
-                              </th>
-                            ))}
+                          {Object.keys(spreadsheetParsed[0] ?? {}).map((k) => (
+                            <th
+                              key={k}
+                              className="whitespace-nowrap px-2 py-2 font-medium text-zinc-500"
+                            >
+                              {k}
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
                         {spreadsheetParsed.slice(0, 5).map((row, i) => (
-                          <tr
-                            key={i}
-                            className="border-b border-zinc-800/80"
-                          >
-                            {Object.keys(spreadsheetParsed[0] ?? {})
-                              .slice(0, 8)
-                              .map((k) => (
+                          <tr key={i} className="border-b border-zinc-800/80">
+                            {Object.keys(spreadsheetParsed[0] ?? {}).map(
+                              (k) => (
                                 <td
                                   key={k}
-                                  className="max-w-[10rem] truncate px-2 py-1.5"
+                                  className="max-w-48 truncate px-2 py-1.5 align-top"
+                                  title={row[k] ?? ""}
                                 >
                                   {row[k] ?? ""}
                                 </td>
-                              ))}
+                              ),
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -671,9 +677,7 @@ export function ContentCreationModal({
                   label="Posted at"
                   mode="datetime-local"
                   value={form.date}
-                  onChange={(next) =>
-                    setForm((f) => ({ ...f, date: next }))
-                  }
+                  onChange={(next) => setForm((f) => ({ ...f, date: next }))}
                 />
                 <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
                   Strategy

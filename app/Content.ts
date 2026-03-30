@@ -94,20 +94,21 @@ export interface ContentFields {
   platform?: Platform | string;
   date: Date;
 
-  primary_job?: PrimaryJob;
-  secondary_jobs?: PrimaryJob[];
+  /** Suggested values in `PrimaryJob`; any string is stored */
+  primary_job?: string;
+  secondary_jobs?: string[];
 
-  content_object?: ContentObject;
+  content_object?: string;
   primary_format_mechanic?: FormatMechanic;
   secondary_format_mechanics?: FormatMechanic[];
 
-  interaction_mode?: InteractionMode;
-  retrieval_mode?: RetrievalMode;
+  interaction_mode?: string;
+  retrieval_mode?: string;
 
-  authorship_mode?: AuthorshipMode;
-  evidence_mode?: EvidenceMode[];
+  authorship_mode?: string;
+  evidence_mode?: string[];
 
-  topic_domain?: TopicDomain;
+  topic_domain?: string;
 
   attention_hook?: AttentionHook[];
   outcome_driver?: OutcomeDriver[];
@@ -142,89 +143,6 @@ export interface IContent extends Document, ContentFields {
   updatedAt: Date;
 }
 
-const PLATFORM_ENUM = [
-  "X",
-  "LinkedIn",
-  "Threads",
-  "TikTok",
-  "Instagram",
-  "Facebook",
-  "YouTube",
-  "Twitch",
-  "Discord",
-  "Reddit",
-  "Telegram",
-  "WhatsApp",
-  "Signal",
-  "Email",
-  "SMS",
-  "Phone",
-  "Other",
-] as const;
-
-const PRIMARY_JOB_ENUM = [
-  "Explain",
-  "Prove",
-  "Convert",
-  "Invite",
-  "Relate",
-  "React",
-  "Predict",
-  "Show",
-  "Discover",
-] as const;
-
-const CONTENT_OBJECT_ENUM = [
-  "single_post",
-  "short_video",
-  "carousel",
-  "thread",
-  "quote_post",
-] as const;
-
-const INTERACTION_MODE_ENUM = [
-  "passive_consumption",
-  "comment_debate",
-  "reply_generation",
-  "click_intent",
-  "save_reference",
-] as const;
-
-const RETRIEVAL_MODE_ENUM = ["feed", "community"] as const;
-
-const AUTHORSHIP_MODE_ENUM = ["founder", "creator_partner", "operator"] as const;
-
-const EVIDENCE_MODE_ENUM = [
-  "reasoned",
-  "process_evidence",
-  "result_evidence",
-  "lived_experience",
-  "implicit",
-] as const;
-
-const TOPIC_DOMAIN_ENUM = [
-  "developer_tools",
-  "design_tools",
-  "technology",
-  "future_of_work",
-  "product_development",
-  "brand_design",
-  "creator_identity",
-  "creator_growth",
-  "creator_culture",
-  "work_culture",
-  "career",
-  "business",
-  "travel",
-  "daily_life",
-  "lifestyle",
-  "data_engineering",
-  "professional_skills",
-  "generational_behavior",
-  "society",
-  "platform_behavior",
-] as const;
-
 const metricFieldSchema = {
   impressions: { type: Number, default: 0, min: 0 },
   likes: { type: Number, default: 0, min: 0 },
@@ -245,7 +163,6 @@ const ContentSchema = new Schema<IContent>(
 
     platform: {
       type: String,
-      enum: [...PLATFORM_ENUM],
     },
 
     externalId: {
@@ -259,20 +176,20 @@ const ContentSchema = new Schema<IContent>(
       index: true,
     },
 
-    primary_job: { type: String, enum: [...PRIMARY_JOB_ENUM] },
-    secondary_jobs: [{ type: String, enum: [...PRIMARY_JOB_ENUM] }],
+    primary_job: { type: String },
+    secondary_jobs: [{ type: String }],
 
-    content_object: { type: String, enum: [...CONTENT_OBJECT_ENUM] },
+    content_object: { type: String },
     primary_format_mechanic: { type: String },
     secondary_format_mechanics: [{ type: String }],
 
-    interaction_mode: { type: String, enum: [...INTERACTION_MODE_ENUM] },
-    retrieval_mode: { type: String, enum: [...RETRIEVAL_MODE_ENUM] },
+    interaction_mode: { type: String },
+    retrieval_mode: { type: String },
 
-    authorship_mode: { type: String, enum: [...AUTHORSHIP_MODE_ENUM] },
-    evidence_mode: [{ type: String, enum: [...EVIDENCE_MODE_ENUM] }],
+    authorship_mode: { type: String },
+    evidence_mode: [{ type: String }],
 
-    topic_domain: { type: String, enum: [...TOPIC_DOMAIN_ENUM] },
+    topic_domain: { type: String },
 
     attention_hook: [{ type: String }],
     outcome_driver: [{ type: String }],
@@ -411,16 +328,16 @@ export type ContentApiPayload = {
   externalId?: string;
   platform?: string;
   date: string;
-  primary_job?: PrimaryJob;
-  secondary_jobs?: PrimaryJob[];
-  content_object?: ContentObject;
+  primary_job?: string;
+  secondary_jobs?: string[];
+  content_object?: string;
   primary_format_mechanic?: FormatMechanic;
   secondary_format_mechanics?: FormatMechanic[];
-  interaction_mode?: InteractionMode;
-  retrieval_mode?: RetrievalMode;
-  authorship_mode?: AuthorshipMode;
-  evidence_mode?: EvidenceMode[];
-  topic_domain?: TopicDomain;
+  interaction_mode?: string;
+  retrieval_mode?: string;
+  authorship_mode?: string;
+  evidence_mode?: string[];
+  topic_domain?: string;
   attention_hook?: AttentionHook[];
   outcome_driver?: OutcomeDriver[];
   pattern_notes?: string;
@@ -454,16 +371,16 @@ export function contentLeanToApiPayload(
     externalId: c.externalId as string | undefined,
     platform: c.platform as string | undefined,
     date: Number.isNaN(rawDate.getTime()) ? new Date(0).toISOString() : rawDate.toISOString(),
-    primary_job: c.primary_job as PrimaryJob | undefined,
-    secondary_jobs: c.secondary_jobs as PrimaryJob[] | undefined,
-    content_object: c.content_object as ContentObject | undefined,
+    primary_job: c.primary_job as string | undefined,
+    secondary_jobs: c.secondary_jobs as string[] | undefined,
+    content_object: c.content_object as string | undefined,
     primary_format_mechanic: c.primary_format_mechanic as string | undefined,
     secondary_format_mechanics: c.secondary_format_mechanics as string[] | undefined,
-    interaction_mode: c.interaction_mode as InteractionMode | undefined,
-    retrieval_mode: c.retrieval_mode as RetrievalMode | undefined,
-    authorship_mode: c.authorship_mode as AuthorshipMode | undefined,
-    evidence_mode: c.evidence_mode as EvidenceMode[] | undefined,
-    topic_domain: c.topic_domain as TopicDomain | undefined,
+    interaction_mode: c.interaction_mode as string | undefined,
+    retrieval_mode: c.retrieval_mode as string | undefined,
+    authorship_mode: c.authorship_mode as string | undefined,
+    evidence_mode: c.evidence_mode as string[] | undefined,
+    topic_domain: c.topic_domain as string | undefined,
     attention_hook: c.attention_hook as string[] | undefined,
     outcome_driver: c.outcome_driver as string[] | undefined,
     pattern_notes: c.pattern_notes as string | undefined,
